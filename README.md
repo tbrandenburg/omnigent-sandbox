@@ -30,14 +30,33 @@ is the only place OpenCode runs and the workspace lives.
 
 ## Quick start
 
+The full compose stack lives in [`deploy/docker/`](deploy/docker/):
+
 ```bash
-cp .env.example .env
-./bootstrap.sh   # mints secrets into .env, idempotent, unattended
+cd deploy/docker
+cp .env.example .env   # or just run ./bootstrap.sh, which does this for you
+./bootstrap.sh         # mints secrets into .env, idempotent, unattended
 docker compose up -d
+curl http://localhost:8000/health
 ```
 
-Open the printed server URL, sign in, start a new chat, pick the registered
-host, select the `opencode-native` harness.
+Open `http://localhost:8000` (or `${OMNIGENT_PORT}` if overridden), sign in,
+start a new chat, pick the registered host, select the `opencode-native`
+harness and the `opencode/big-pickle` model.
+
+**No credentials of any kind are needed to clone-and-run this repo from
+scratch** — no LLM API key, no container registry login, no `GIT_TOKEN`.
+`bootstrap.sh` mints only the app's own internal secrets (Postgres password,
+cookie secrets) locally into a git-ignored `.env`.
+
+## Pinned versions
+
+- [Omnigent](https://github.com/omnigent-ai/omnigent) `v0.11.0`
+- [OpenCode](https://github.com/anomalyco/opencode) `1.18.25`
+  (must stay within Omnigent's supported range `[1.17.7, 1.19.0)`)
+
+See [`deploy/docker/Dockerfile.host`](deploy/docker/Dockerfile.host) for
+where these are pinned as build args.
 
 ## Full plan
 

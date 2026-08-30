@@ -1,0 +1,71 @@
+# Minimal Omnigent host (worker) image: OpenCode CLI + omnigent CLI only.
+#
+# This is NOT the upstream `deploy/docker/Dockerfile --target host` stage —
+# that stage builds omnigent from source (needs the full omnigent source
+# tree as build context) and bundles every coding-harness CLI (claude,
+# codex, pi, kiro-cli, agy) for managed-sandbox use. This deployment only
+# needs OpenCode, so a slim, from-PyPI image keeps the build fast and the
+# context trivial (this file has zero dependency on the omnigent source
+# tree, unlike the upstream Dockerfile).
+#
+# Pinned versions (re-verify range whenever Omnigent is upgraded — see
+# docs/INITIAL.md "OpenCode version compatibility"):
+#   - omnigent   0.11.0   (matches the server's pinned release)
+#   - opencode   1.18.25  (must stay in [1.17.7, 1.19.0))
+ARG NODE_VERSION=22
+
+FROM node:${NODE_VERSION}-slim AS node-runtime
+
+FROM python:3.12-slim
+
+ARG OPENCODE_VERSION=1.18.25
+ARG OMNIGENT_VERSION=0.11.0
+
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# git for OpenCode's internal diffing, curl/ca-certificates for outbound
+# HTTPS to the server. omnigent (Python) needs Python >=3.12 (checked
+# against PyPI classifiers), so this image starts from python:3.12-slim
+# rather than a node base, and Node is layered on top for OpenCode instead.
+# tmux is required by omnigent's native-terminal launcher
+# (omnigent/inner/terminal.py: create_terminal_instance() raises
+# "tmux is not installed or not on PATH" otherwise) — the opencode-native
+# harness wraps `opencode serve` in a tmux session so the web UI can
+# attach/take-over the resident process; without it every session fails
+# at "Native OpenCode terminal failed to start".
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      git curl ca-certificates tmux \
+ && rm -rf /var/lib/apt/lists/*
+
+# Node runtime, copied from the official image (matches the
+# Dockerfile pattern in the upstream omnigent Dockerfile) — keeps the
+# version pinned to NODE_VERSION without adding NodeSource's apt repo.
+COPY --from=node-runtime /usr/local/bin/node /usr/local/bin/node
+COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+
+# OpenCode CLI, pinned. big-pickle (the default free model) needs zero
+# credentials — no `opencode auth login` step required.
+RUN npm install -g --no-audit --no-fund opencode-ai@${OPENCODE_VERSION} \
+ && npm cache clean --force \
+ && opencode --version
+
+# omnigent CLI, pinned, isolated in its own venv so it can't collide with
+# any Python OpenCode itself might shell out to.
+RUN python3 -m venv /opt/omnigent-venv \
+ && /opt/omnigent-venv/bin/pip install --no-cache-dir "omnigent==${OMNIGENT_VERSION}" \
+ && ln -s /opt/omnigent-venv/bin/omnigent /usr/local/bin/omnigent \
+ && omnigent --version
+
+# Non-root user; only the mounted workspace needs to be writable.
+RUN useradd -m -u 1000 -s /bin/bash host
+USER host
+WORKDIR /workspace
+
+COPY --chown=host:host host-entrypoint.sh /usr/local/bin/host-entrypoint.sh
+RUN chmod +x /usr/local/bin/host-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/host-entrypoint.sh"]
