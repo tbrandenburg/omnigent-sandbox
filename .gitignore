@@ -15,6 +15,7 @@ node_modules/
 .DS_Store
 *.swp
 
-# playwright evidence screenshots are fine to keep by default;
-# uncomment if you don't want them tracked:
-# .playwright-mcp/
+# playwright MCP output (screenshots, snapshots, console/network logs) —
+# local evidence only, not tracked.
+.playwright-mcp/
+
