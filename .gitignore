@@ -1,0 +1,20 @@
+.env
+*.env.local
+
+# workspace / runtime data
+data/
+*.db
+*.sqlite
+
+# node / python cruft
+__pycache__/
+*.pyc
+node_modules/
+
+# editor / OS
+.DS_Store
+*.swp
+
+# playwright evidence screenshots are fine to keep by default;
+# uncomment if you don't want them tracked:
+# .playwright-mcp/
